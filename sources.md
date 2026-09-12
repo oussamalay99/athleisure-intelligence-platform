@@ -1,5 +1,5 @@
 # SOURCES
 
 - [Gymshark](https://www.gymshark.com/)
-- [Alo Yoga](https://www.aloyoga.com/en-ma)
+- [Alo Yoga](https://www.aloyoga.com/)
 - [Vuori](https://vuoriclothing.com/)
