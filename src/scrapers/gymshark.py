@@ -10,6 +10,16 @@ class GymSharkScraper(BaseScraper):
     def __init__(self, base_url: str):
         super().__init__(base_url)
 
+    def get_total_products_number(self):
+        response = self.httpClient.get(self.base_url)
+        soup = BeautifulSoup(response.text, "lxml")
+        total_res_element = soup.select("p.pagination_pagination-text__cC_Lu")[0]
+        total_products = int(total_res_element.text.split()[-2])
+        total_pages = round(total_products / 60)
+        return total_products, total_pages
+
+    # Fetching the total products from the front is not always accurate
+    # Proposed solution is increment the page parameter until ther is no result
     # TODO
     def discover_product_urls(self) -> list[str]:
         product_urls = []
