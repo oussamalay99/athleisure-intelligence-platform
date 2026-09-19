@@ -12,8 +12,7 @@ class GymSharkScraper(BaseScraper):
         super().__init__(base_url)
 
     def get_total_products_number(self):
-        response = self.httpClient.get(self.base_url)
-        soup = BeautifulSoup(response.text, "lxml")
+        soup = self.soup(url=self.base_url)
         total_res_element = soup.select("p.pagination_pagination-text__cC_Lu")[0]
         total_products = int(total_res_element.text.split()[-2])
         total_pages = round(total_products / 60)
@@ -24,27 +23,17 @@ class GymSharkScraper(BaseScraper):
     # TODO
     def discover_product_urls_per_page(self, page: int = 0) -> list[str]:
         product_urls = []
-        # try:
-        #     response = self.httpClient.get(self.base_url)
-
-        #     # print("Status:", response.status_code)
-        #     # print("Content-Type:", response.headers.get("content-type"))
-        #     # print("Response Length:", len(response.text))
-        #     # print("First 500 chars:")
-        #     # print(response.text[:5000])
-
-        # except Exception as exc:
-        #     print(
-        #         f"[{self.source_name}] - Error: while getting response from {self.base_url}"
-        #     )
-        #     return []
         params = {"page": page}
+
         url = f"{self.base_url}?{urllib.parse.urlencode(params)}"
         soup = self.soup(url=url)
+
         if soup is None:
             return []
+
         products_section = soup.select_one("div.pagination_pagination__rI_ag")
         products_imgs = products_section.select("div.product-card_image-wrap__s68z6")
+
         print(f"page: {page+1} - Total products: {len(products_imgs)}")
 
         for img in products_imgs:
@@ -56,8 +45,37 @@ class GymSharkScraper(BaseScraper):
 
         return product_urls
 
+    def check_no_results_per_page(self,page:int):
+        params = {"page": page} 
+        url = f"{self.base_url}?{urllib.parse.urlencode(params)}"
+        soup = self.soup(url=url)
+
+        if soup is None:
+            return True
+
+        no_result_section = soup.select_one("div.no-results_no-results__x4Fv_")
+        if no_result_section :
+            return True
+
+        return False
+        
+
     def discover_product_urls(self):
-        return super().discover_product_urls()
+        products_urls = []
+        _  , max_pages = self.get_total_products_number()
+        for page in range(max_pages):
+            print(f"Fetching products urls for page - {page}")
+            if self.check_no_results_per_page(page=page):
+                print(f"page: {page} : Reached the end of products")
+                break
+            try:
+                page_products_urls = self.discover_product_urls_per_page(page=page)
+            except Exception as e:
+                print('Error :', e)
+                continue
+            products_urls += page_products_urls
+
+        return products_urls
 
     # TODO
     def scrape_product(self, product_url) -> dict[str, Any]:

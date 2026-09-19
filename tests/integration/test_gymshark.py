@@ -1,9 +1,9 @@
+import json
 from src.scrapers.gymshark import GymSharkScraper
 
 GS = GymSharkScraper(base_url="https://www.gymshark.com/collections/all-products/mens")
 
-page1 = GS.discover_product_urls_per_page(page=0)
-page2 = GS.discover_product_urls_per_page(page=1)
+products_urls = GS.discover_product_urls()
 
-print(len(set(page1 + page2)))
-print(set(page1 + page2))
+with open("data/raw/gymshark/product_urls.json", "w") as f:
+    json.dump(products_urls, f, indent=4)
