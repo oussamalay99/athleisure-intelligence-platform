@@ -27,6 +27,15 @@ class BaseScraper(ABC):
     def scrape_product(self, product_url: str) -> dict[str, Any]:
         raise NotImplementedError
 
+    def soup(self, url: str, parser: str = "lxml"):
+        try:
+            res = self.httpClient.get(url)
+        except Exception as e:
+            print(f"Error while getting resoponse from : {url}")
+            return None
+        soup = BeautifulSoup(res.text, parser)
+        return soup
+
     def scrape(self) -> list[dict[str, Any]]:
         products_urls = self.discover_product_urls()
 

@@ -3,3 +3,4 @@ BASE_URL: dict[str, str] = {
     "alo": "",
     "vuori": "",
 }
+

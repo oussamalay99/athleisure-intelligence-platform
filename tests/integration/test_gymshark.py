@@ -2,5 +2,8 @@ from src.scrapers.gymshark import GymSharkScraper
 
 GS = GymSharkScraper(base_url="https://www.gymshark.com/collections/all-products/mens")
 
-total = GS.get_total_products_number()
-print(total)
+page1 = GS.discover_product_urls_per_page(page=0)
+page2 = GS.discover_product_urls_per_page(page=1)
+
+print(len(set(page1 + page2)))
+print(set(page1 + page2))
