@@ -1,3 +1,5 @@
+import json
+from tqdm import tqdm
 from bs4 import BeautifulSoup
 from abc import ABC, abstractmethod
 from typing import Any
@@ -18,6 +20,7 @@ class BaseScraper(ABC):
     def __init__(self, base_url: str):
         self.base_url = base_url
         self.httpClient = HttpClient()
+        self.OUTPUT_FILE: str = f"data/raw/{self.source_name}/products_raw.json"
 
     @abstractmethod
     def discover_product_urls(self) -> list[str]:
@@ -37,11 +40,16 @@ class BaseScraper(ABC):
         return soup
 
     def scrape(self) -> list[dict[str, Any]]:
+        print(f"[{self.source_name}] - Fetching products urls ...")
         products_urls = self.discover_product_urls()
-
+        print(f"[{self.source_name}] - 5 first products urls:\n {products_urls[:5]}")
+        print(f"[{self.source_name}] - Scraping products ...")
         products = []
-
-        for product_url in products_urls:
+        for product_url in tqdm(
+            products_urls,
+            desc=f"[{self.source_name}] Products",
+            unit="product"
+        ):
             try:
                 product = self.scrape_product(product_url)
 
@@ -51,4 +59,13 @@ class BaseScraper(ABC):
             except Exception as e:
                 print(f"[{self.source_name}]" f"Failed: {product_url} - {e}")
 
+        print(f"{self.source_name} saving products {self.OUTPUT_FILE}...")
+        try:
+            with open("data/raw/gymshark/product_urls.json", "w") as f:
+                json.dump(products_urls, f, indent=4)
+        except Exception as e:
+            print(
+                f"{self.source_name} Failed saving products in this file {self.OUTPUT_FILE}"
+            )
+            print(e)
         return products
