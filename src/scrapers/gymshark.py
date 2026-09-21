@@ -58,8 +58,9 @@ class GymSharkScraper(BaseScraper):
 
         return False
 
-    def discover_product_urls(self):
+    def discover_product_urls(self, limit:int=120):
         products_urls = []
+        products_counter = 0
         _, max_pages = self.get_total_products_number()
         for page in range(max_pages):
             print(f"{self.source_name} - Fetching products urls for page - {page}")
@@ -76,7 +77,11 @@ class GymSharkScraper(BaseScraper):
                     e,
                 )
                 continue
-            products_urls += page_products_urls
+            products_counter += len(page_products_urls)
+            if products_counter <= limit:
+                products_urls += page_products_urls
+            else:
+            # Add limit logic
 
         return products_urls
 

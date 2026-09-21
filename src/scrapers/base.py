@@ -3,7 +3,8 @@ from tqdm import tqdm
 from bs4 import BeautifulSoup
 from abc import ABC, abstractmethod
 from typing import Any
-from .http_client import HttpClient
+from http_client import HttpClient
+from utils.logging import get_logger
 
 
 class BaseScraper(ABC):
@@ -21,9 +22,10 @@ class BaseScraper(ABC):
         self.base_url = base_url
         self.httpClient = HttpClient()
         self.OUTPUT_FILE: str = f"data/raw/{self.source_name}/products_raw.json"
+        self.logger = 
 
     @abstractmethod
-    def discover_product_urls(self) -> list[str]:
+    def discover_product_urls(self, limit:int=120) -> list[str]:
         raise NotImplementedError
 
     @abstractmethod
@@ -39,9 +41,9 @@ class BaseScraper(ABC):
         soup = BeautifulSoup(res.text, parser)
         return soup
 
-    def scrape(self) -> list[dict[str, Any]]:
+    def scrape(self, limit:int=120) -> list[dict[str, Any]]:
         print(f"[{self.source_name}] - Fetching products urls ...")
-        products_urls = self.discover_product_urls()
+        products_urls = self.discover_product_urls(limit=limit)
         print(f"[{self.source_name}] - 5 first products urls:\n {products_urls[:5]}")
         print(f"[{self.source_name}] - Scraping products ...")
         products = []
