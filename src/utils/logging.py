@@ -2,9 +2,9 @@ import os
 import logging
 
 from logging.handlers import RotatingFileHandler
-from config.settings import LOG_DIR, LOG_LEVEL, LOG_FILE, LOG_MAX_BYTES, LOG_BACKUP_COUNT
+from src.config.settings import LOG_DIR, LOG_LEVEL, LOG_FILE, LOG_MAX_BYTES, LOG_BACKUP_COUNT
 
-os.makedirs(LOG_DIR)
+os.makedirs(LOG_DIR, exist_ok=True)
 
 def get_logger(name:str) -> logging.Logger:
     logger = logging.getLogger(name)

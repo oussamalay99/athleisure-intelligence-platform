@@ -1,73 +1,110 @@
 import json
-from tqdm import tqdm
-from bs4 import BeautifulSoup
+import threading
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
-from http_client import HttpClient
-from utils.logging import get_logger
+
+from bs4 import BeautifulSoup
+from requests.exceptions import RequestException
+from tqdm import tqdm
+
+from src.scrapers.http_client import HttpClient
+from src.utils.logging import get_logger
 
 
 class BaseScraper(ABC):
-    """
-    Base Interface for all e-commerce scrapers
-
-    Keyword arguments:
-    argument -- description
-    Return: return_description
-    """
-
     source_name: str
 
-    def __init__(self, base_url: str):
+    def __init__(
+        self, base_url: str, output_dir: str | Path | None = None
+    ) -> None:
         self.base_url = base_url
-        self.httpClient = HttpClient()
-        self.OUTPUT_FILE: str = f"data/raw/{self.source_name}/products_raw.json"
-        self.logger = 
+        self.output_dir = (
+            Path(output_dir)
+            if output_dir is not None
+            else Path("data") / "raw" / self.source_name.lower()
+        )
+        self.product_urls_file = self.output_dir / "product_urls.json"
+        self.products_file = self.output_dir / "products.json"
+        self.logger = get_logger(f"{__name__}.{self.source_name.lower()}")
+
+        self.http_client = HttpClient()
+        self._http_clients = threading.local()
+        self._http_clients.client = self.http_client
 
     @abstractmethod
-    def discover_product_urls(self, limit:int=120) -> list[str]:
+    def discover_product_urls(self, limit: int = 120) -> list[str]:
         raise NotImplementedError
 
     @abstractmethod
     def scrape_product(self, product_url: str) -> dict[str, Any]:
         raise NotImplementedError
 
-    def soup(self, url: str, parser: str = "lxml"):
+    def _get_http_client(self) -> HttpClient:
+        client = getattr(self._http_clients, "client", None)
+        if client is None:
+            client = HttpClient()
+            self._http_clients.client = client
+        return client
+
+    def soup(self, url: str, parser: str = "lxml") -> BeautifulSoup | None:
         try:
-            res = self.httpClient.get(url)
-        except Exception as e:
-            print(f"Error while getting resoponse from : {url}")
+            response = self._get_http_client().get(url)
+        except RequestException as error:
+            self.logger.warning("Request failed for %s: %s", url, error)
             return None
-        soup = BeautifulSoup(res.text, parser)
-        return soup
 
-    def scrape(self, limit:int=120) -> list[dict[str, Any]]:
-        print(f"[{self.source_name}] - Fetching products urls ...")
-        products_urls = self.discover_product_urls(limit=limit)
-        print(f"[{self.source_name}] - 5 first products urls:\n {products_urls[:5]}")
-        print(f"[{self.source_name}] - Scraping products ...")
+        return BeautifulSoup(response.text, parser)
+
+    def scrape_product_safely(self, product_url: str) -> dict[str, Any]:
+        try:
+            return self.scrape_product(product_url)
+        except Exception:
+            self.logger.exception("Failed to scrape product: %s", product_url)
+            return {}
+
+    def _scrape_products(
+        self, product_urls: list[str], max_workers: int
+    ) -> list[dict[str, Any]]:
         products = []
-        for product_url in tqdm(
-            products_urls,
-            desc=f"[{self.source_name}] Products",
-            unit="product"
-        ):
-            try:
-                product = self.scrape_product(product_url)
-
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for product in tqdm(
+                executor.map(self.scrape_product_safely, product_urls),
+                total=len(product_urls),
+                desc=f"[{self.source_name}] Products",
+                unit="product",
+            ):
                 if product:
                     products.append(product)
+        return products
 
-            except Exception as e:
-                print(f"[{self.source_name}]" f"Failed: {product_url} - {e}")
+    def _save_results(
+        self, product_urls: list[str], products: list[dict[str, Any]]
+    ) -> None:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.product_urls_file.write_text(
+            json.dumps(product_urls, indent=4), encoding="utf-8"
+        )
+        self.products_file.write_text(
+            json.dumps(products, indent=4), encoding="utf-8"
+        )
 
-        print(f"{self.source_name} saving products {self.OUTPUT_FILE}...")
-        try:
-            with open("data/raw/gymshark/product_urls.json", "w") as f:
-                json.dump(products_urls, f, indent=4)
-        except Exception as e:
-            print(
-                f"{self.source_name} Failed saving products in this file {self.OUTPUT_FILE}"
-            )
-            print(e)
+    def scrape(
+        self, limit: int = 120, max_workers: int = 5
+    ) -> list[dict[str, Any]]:
+        if max_workers < 1:
+            raise ValueError("max_workers must be at least 1")
+
+        self.logger.info("Discovering product URLs")
+        product_urls = self.discover_product_urls(limit=limit)
+        self.logger.info(
+            "Discovered %d product URLs; first five: %s",
+            len(product_urls),
+            product_urls[:5],
+        )
+
+        products = self._scrape_products(product_urls, max_workers)
+        self.logger.info("Saving results to %s", self.output_dir)
+        self._save_results(product_urls, products)
         return products

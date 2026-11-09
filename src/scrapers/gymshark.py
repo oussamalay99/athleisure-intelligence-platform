@@ -1,97 +1,64 @@
 import urllib.parse
 from typing import Any
 
-from .base import BaseScraper
+from src.scrapers.base import BaseScraper
 
 
 class GymSharkScraper(BaseScraper):
     source_name = "GYMSHARK"
 
-    def __init__(self, base_url: str):
-        super().__init__(base_url)
-
-    def get_total_products_number(self):
-        soup = self.soup(url=self.base_url)
-        total_res_element = soup.select("p.pagination_pagination-text__cC_Lu")[0]
-        total_products = int(total_res_element.text.split()[-2])
-        total_pages = round(total_products / 60)
-        return total_products, total_pages
-
-    # Fetching the total products from the front is not always accurate
-    # Proposed solution is increment the page parameter until ther is no result
-    # TODO
     def discover_product_urls_per_page(self, page: int = 0) -> list[str]:
-        product_urls = []
-        params = {"page": page}
-
-        url = f"{self.base_url}?{urllib.parse.urlencode(params)}"
+        url = f"{self.base_url}?{urllib.parse.urlencode({'page': page})}"
         soup = self.soup(url=url)
 
         if soup is None:
             return []
 
+        if soup.select_one("div.no-results_no-results__x4Fv_"):
+            return []
+
         products_section = soup.select_one("div.pagination_pagination__rI_ag")
+        if products_section is None:
+            return []
         products_imgs = products_section.select("div.product-card_image-wrap__s68z6")
 
-        print(f"page: {page+1} - Total products: {len(products_imgs)}")
+        self.logger.info(
+            "Listing page %d returned %d products", page + 1, len(products_imgs)
+        )
+        return [
+            link["href"]
+            for image in products_imgs
+            if (link := image.find("a", href=True)) is not None
+        ]
 
-        for img in products_imgs:
-            product_link = img.a.get("href")
-            # print(product_link)
-            product_urls.append(product_link)
-        # for link in product_links:
-        #     print(link.get("href"))
+    def discover_product_urls(self, limit: int = 120):
+        if limit <= 0:
+            return []
 
-        return product_urls
-
-    def check_no_results_per_page(self, page: int):
-        params = {"page": page}
-        url = f"{self.base_url}?{urllib.parse.urlencode(params)}"
-        soup = self.soup(url=url)
-
-        if soup is None:
-            return True
-
-        no_result_section = soup.select_one("div.no-results_no-results__x4Fv_")
-        if no_result_section:
-            return True
-
-        return False
-
-    def discover_product_urls(self, limit:int=120):
         products_urls = []
-        products_counter = 0
-        _, max_pages = self.get_total_products_number()
-        for page in range(max_pages):
-            print(f"{self.source_name} - Fetching products urls for page - {page}")
-            if self.check_no_results_per_page(page=page):
-                print(
-                    f"{self.source_name} - page: {page} : Reached the end of products"
-                )
-                break
+        page = 0
+        while len(products_urls) < limit:
+            self.logger.info("Fetching listing page %d", page)
             try:
                 page_products_urls = self.discover_product_urls_per_page(page=page)
-            except Exception as e:
-                print(
-                    f"{self.source_name} - Error while getting product urls for page {page}: ",
-                    e,
+            except Exception:
+                self.logger.exception(
+                    "Failed to get product URLs from listing page %d", page
                 )
-                continue
-            products_counter += len(page_products_urls)
-            if products_counter <= limit:
-                products_urls += page_products_urls
-            else:
-            # Add limit logic
+                break
+            if not page_products_urls:
+                self.logger.info("No products found on listing page %d; stopping", page)
+                break
+            products_urls.extend(page_products_urls[: limit - len(products_urls)])
+            page += 1
 
         return products_urls
 
-    # TODO
-    def scrape_product(self, product_url) -> dict[str, Any]:
-        # return super().scrape_product(product_url)
+    def scrape_product(self, product_url: str) -> dict[str, Any]:
         soup = self.soup(product_url)
         if soup is None:
-            print(f"{self.source_name} - Error while scraping product: {product_url}")
-            return dict()
+            self.logger.warning("Could not retrieve product page: %s", product_url)
+            return {}
 
         title_div = soup.find("h1", class_="product-information_title__PGbQD")
         product_title = title_div.get_text(strip=True)
@@ -132,7 +99,6 @@ class GymSharkScraper(BaseScraper):
             product_designed_for = product_designed_for_element.get_text(strip=True)
         else:
             product_designed_for = ""
-        # product_desc_element = soup.find()
         return {
             "title": product_title,
             "category": product_cat,

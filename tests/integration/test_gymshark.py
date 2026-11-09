@@ -27,4 +27,4 @@ GS = GymSharkScraper(base_url="https://www.gymshark.com/collections/all-products
 # )
 # print(product)
 # print(GS.OUTPUT_FILE)
-GS.scrape()
+GS.scrape(limit=1000)
